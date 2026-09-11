@@ -17,8 +17,7 @@
 
 ## 当前状态
 
-- i7 尚未安装 Reader 或 SQLCipher 运行环境。
-- 本次未读取聊天内容、未获取密钥、未运行 provider、未修改微信或其数据库。
+- Reader 已安装；本次未读取聊天内容、未获取密钥、未运行 provider、未修改微信或其数据库。
 - Reader 代码和后续运行目录应放在 i7 独立工作区；不要把 i7 的微信数据复制回 M3。
 - 后续如需运行 provider，必须在 i7 上重新审核适配 x86_64 与微信 4.1.13 的具体构建，并单独确认进程访问、重启和重签名副作用。
 
@@ -33,3 +32,16 @@
 Homebrew 为 `ast-grep` 预编译依赖启动的 LLVM 编译已停止，残留的 `ninja` 已卸载；没有保留无关的编译进程。
 
 i7 原本的 `~/.zshenv` 为空；已加入 `/usr/local/bin` 与 `~/.local/bin` 到 PATH，使普通 SSH 命令也能直接找到这三个工具。
+
+## Reader 安装状态
+
+2026-09-11 已将本项目的 `Rion WeChat Reader` 源码放入 i7 的独立目录：
+
+- 源码：`~/Library/Application Support/rion-wechat-reader-i7/source/rion-wechat-reader/`
+- 命令：`~/.local/bin/rion-wechat-cli`
+- 运行环境：`~/.local/share/rion-wechat-cli/venv/`
+- Reader：`0.9.2-preview.2`
+- SQLCipher：`4.12.0 community`（隔离 venv）
+- zstandard：`0.25.0`（隔离 venv）
+
+`rion-wechat-cli self-test --require-sqlcipher` 已通过。对当前运行账号的 `db_storage` 目录执行只读 `access-plan`：扫描到 19 个数据库，但状态为 `needs_access`、`unresolved_databases=19`；没有写入 Reader 配置、没有获取密钥、没有运行 provider，也没有读取聊天正文。Reader 当前等待用户已有访问材料或另行审核的接入方案。
