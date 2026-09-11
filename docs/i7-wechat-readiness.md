@@ -45,3 +45,5 @@ i7 原本的 `~/.zshenv` 为空；已加入 `/usr/local/bin` 与 `~/.local/bin` 
 - zstandard：`0.25.0`（隔离 venv）
 
 `rion-wechat-cli self-test --require-sqlcipher` 已通过。对当前运行账号的 `db_storage` 目录执行只读 `access-plan`：扫描到 19 个数据库，但状态为 `needs_access`、`unresolved_databases=19`；没有写入 Reader 配置、没有获取密钥、没有运行 provider，也没有读取聊天正文。Reader 当前等待用户已有访问材料或另行审核的接入方案。
+
+2026-09-12 再次检查：微信进程句柄仍指向该账号。`discover` 扫描 19 个数据库，`unreadable_or_encrypted_count=19`、`scan_error_count=0`、未截断；没有可直接使用的授权数据库。`doctor` 显示 `notification_preview_ok=true`、覆盖范围为 `incoming_preview_only`，但当前 `notifications --limit 20` 返回 0 条保留通知。因此现阶段没有完整历史/数据库读取能力，也没有可显示的通知消息。
