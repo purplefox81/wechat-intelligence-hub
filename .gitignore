@@ -15,3 +15,6 @@ keys.json
 all_keys.json
 access-runs/
 verified-access-*/
+
+# M3 微信读取研究已停止：本机产物归档不进入 Git
+.local-archive/
