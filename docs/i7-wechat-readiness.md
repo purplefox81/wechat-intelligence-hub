@@ -31,3 +31,5 @@
 - `ast-grep` 0.45.3，命令 `ast-grep`；通过官方 PyPI 包安装，并链接到 `~/.local/bin/ast-grep`
 
 Homebrew 为 `ast-grep` 预编译依赖启动的 LLVM 编译已停止，残留的 `ninja` 已卸载；没有保留无关的编译进程。
+
+i7 原本的 `~/.zshenv` 为空；已加入 `/usr/local/bin` 与 `~/.local/bin` 到 PATH，使普通 SSH 命令也能直接找到这三个工具。
