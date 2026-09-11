@@ -47,3 +47,5 @@ i7 原本的 `~/.zshenv` 为空；已加入 `/usr/local/bin` 与 `~/.local/bin` 
 `rion-wechat-cli self-test --require-sqlcipher` 已通过。对当前运行账号的 `db_storage` 目录执行只读 `access-plan`：扫描到 19 个数据库，但状态为 `needs_access`、`unresolved_databases=19`；没有写入 Reader 配置、没有获取密钥、没有运行 provider，也没有读取聊天正文。Reader 当前等待用户已有访问材料或另行审核的接入方案。
 
 2026-09-12 再次检查：微信进程句柄仍指向该账号。`discover` 扫描 19 个数据库，`unreadable_or_encrypted_count=19`、`scan_error_count=0`、未截断；没有可直接使用的授权数据库。`doctor` 显示 `notification_preview_ok=true`、覆盖范围为 `incoming_preview_only`，但当前 `notifications --limit 20` 返回 0 条保留通知。因此现阶段没有完整历史/数据库读取能力，也没有可显示的通知消息。
+
+同日收到一条测试消息后，发现当前 macOS `usernoted` plist 将标题和正文嵌套在 `req` 字段；Reader 原先只读取顶层字段，导致记录存在但正文为空。已在 `notification_title_body` 增加嵌套格式兼容，并通过回归测试；重新部署到 i7 后，通知返回 1 条，发送者、会话和正文均可解析，覆盖仍明确标记为 `incoming_preview_only`。正文未写入项目文档或带回对话。

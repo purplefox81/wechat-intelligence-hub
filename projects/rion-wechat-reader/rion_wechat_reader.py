@@ -1763,6 +1763,26 @@ def tool_schema(name: str) -> dict[str, Any]:
     }
 
 
+def notification_title_body(payload: dict[str, Any]) -> tuple[str, str]:
+    """Read notification title/body across old and current macOS plist shapes."""
+    request = payload.get("req")
+    sources = [payload]
+    if isinstance(request, dict):
+        sources.append(request)
+    title = ""
+    body = ""
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        if not title:
+            title = str(source.get("titl") or source.get("nam") or "")
+        if not body:
+            body = str(source.get("body") or "")
+        if title and body:
+            break
+    return title, body
+
+
 def notification_records(limit: int, after: str | None, keyword: str | None) -> list[dict[str, Any]]:
     path = DEFAULT_NOTIFICATIONS_DB
     if not path.exists():
@@ -1788,8 +1808,9 @@ def notification_records(limit: int, after: str | None, keyword: str | None) -> 
             payload = plistlib.loads(blob)
         except Exception:
             continue
-        title = str(payload.get("titl") or payload.get("nam") or "")
-        body = str(payload.get("body") or "")
+        # macOS versions differ: older records keep these fields at the
+        # top level, while current usernoted records nest them under `req`.
+        title, body = notification_title_body(payload)
         if needle and needle not in f"{title} {body}".casefold():
             continue
         result.append(
