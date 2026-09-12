@@ -63,3 +63,9 @@ Reader 的授权 worker 以 root 调用固定二进制，并只传入筛选后�
 成功标准是 Reader 返回 `state=ready`、`live_database_read_ok=true`，然后能从数据库读取并抽检已知最近私聊；只获得部分 key、进程退出码为 0 或通知预览可读都不算成功。
 
 失败、取消或超时后停止重复尝试。先检查 `~/.config/rion-wechat-reader/access-runs/` 的固定结果和恢复锁、运行中的 provider/shadow 进程以及官方微信签名；保留已经生成的材料用于单独验证，不在终端或对话中输出。确认 shadow 已退出、官方微信能正常启动并且失败原因明确后，才考虑是否另行授权重试。
+
+## 2026-09-12 首次执行结果
+
+用户已明确授权一次 `onboard --apply`。第一次从 SSH 会话启动时，macOS `authd` 报告 `session has no ui access`，provider 未启动；随后改从 i7 当前 Aqua 图形会话启动同一固定命令，但 TCC 的 App Data 权限请求一直未完成，进程停在读取数据库根目录的检查点。已终止该实例并卸载临时 LaunchAgent。
+
+最终状态：`provider_executed=false`、`key_acquisition=false`、`configuration_write=false`；无 shadow 应用、无 `wxcli/config.json`、无 provider 进程，官方微信仍在运行且保持腾讯 Developer ID 签名。Reader 私有结果标记为 `authorization_ui_not_confirmed`。若再次尝试，需先在 i7 本机的“系统设置 → 隐私与安全性”中为实际运行的终端/Python 授予访问微信容器所需的“文件与文件夹”或“完整磁盘访问”权限，再重新走一次同样的恢复审查。
