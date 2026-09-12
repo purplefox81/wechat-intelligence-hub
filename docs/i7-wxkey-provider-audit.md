@@ -71,3 +71,5 @@ Reader 的授权 worker 以 root 调用固定二进制，并只传入筛选后�
 最终状态：`provider_executed=false`、`key_acquisition=false`、`configuration_write=false`；无 shadow 应用、无 `wxcli/config.json`、无 provider 进程，官方微信仍在运行且保持腾讯 Developer ID 签名。Reader 私有结果标记为 `authorization_ui_not_confirmed`。若再次尝试，需先在 i7 本机的“系统设置 → 隐私与安全性”中为实际运行的终端/Python 授予访问微信容器所需的“文件与文件夹”或“完整磁盘访问”权限，再重新走一次同样的恢复审查。
 
 随后用户批准了 TCC 和管理员授权，重试一次固定候选。该次进入了 shadow 准备流程，但 worker 返回 `provider_failed`，没有写出访问材料；官方微信随后已重新打开。shadow 曾因 root 所有的父目录无法由普通用户直接移动，最终经用户批准的管理员清理任务移入 `~/.Trash/WeChat-shadow.app`。清理后确认无 shadow/provider 进程、无 `wxcli/config.json`，官方微信仍为腾讯 Developer ID 签名，恢复锁继续保留。失败原因未从被抑制的 provider 输出中臆测，不再自动重试。
+
+用户随后再次明确要求重试，并再次完成 TCC/管理员授权。第三次执行仍返回 `provider_failed`：provider 启动并创建 shadow 后未生成访问材料，官方微信已恢复运行。shadow 已经用户批准移入 `~/.Trash/WeChat-shadow-retry-20260912.app`；临时清理任务已卸载。最终确认无 provider/shadow 进程、无 `wxcli/config.json`，官方微信保持腾讯 Developer ID 签名，恢复锁仍保留。连续两次在授权成功后失败，说明问题不在密码输入时机；本路线停止，不再盲目重试。
