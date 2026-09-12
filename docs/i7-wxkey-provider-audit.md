@@ -73,3 +73,9 @@ Reader 的授权 worker 以 root 调用固定二进制，并只传入筛选后�
 随后用户批准了 TCC 和管理员授权，重试一次固定候选。该次进入了 shadow 准备流程，但 worker 返回 `provider_failed`，没有写出访问材料；官方微信随后已重新打开。shadow 曾因 root 所有的父目录无法由普通用户直接移动，最终经用户批准的管理员清理任务移入 `~/.Trash/WeChat-shadow.app`。清理后确认无 shadow/provider 进程、无 `wxcli/config.json`，官方微信仍为腾讯 Developer ID 签名，恢复锁继续保留。失败原因未从被抑制的 provider 输出中臆测，不再自动重试。
 
 用户随后再次明确要求重试，并再次完成 TCC/管理员授权。第三次执行仍返回 `provider_failed`：provider 启动并创建 shadow 后未生成访问材料，官方微信已恢复运行。shadow 已经用户批准移入 `~/.Trash/WeChat-shadow-retry-20260912.app`；临时清理任务已卸载。最终确认无 provider/shadow 进程、无 `wxcli/config.json`，官方微信保持腾讯 Developer ID 签名，恢复锁仍保留。连续两次在授权成功后失败，说明问题不在密码输入时机；本路线停止，不再盲目重试。
+
+## 2026-09-12 wechat-cli-plus C 扫描尝试
+
+按用户选择准备并运行一次 Intel C 扫描器：源码固定为 `maomao3334/wechat-cli-plus` 提交 `75a322dd09c7c498536d10ff6935c5d52fd5fd2b`，i7 原生构建二进制 SHA-256 为 `8c49e1e6dfcaaa802e51f50d3627dbc832c1241da39e8d017928a824b09fa190`。本次只调用 C 二进制，不调用 Python 包装层，因此不会自动重签 `/Applications/WeChat.app`。
+
+管理员授权后扫描器退出码为 `1`，没有生成 `all_keys.json`；为避免在终端或对话中暴露 key，标准输出和错误输出均丢弃。执行期间微信未退出，之后确认无扫描器/provider/shadow 进程，原微信仍为腾讯 Developer ID 签名。该路线未取得访问材料；由于没有保留原始输出，不能从本次结果推断具体失败原因，也不再自动切换到直接重签原版微信。
