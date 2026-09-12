@@ -79,3 +79,17 @@ Reader 的授权 worker 以 root 调用固定二进制，并只传入筛选后�
 按用户选择准备并运行一次 Intel C 扫描器：源码固定为 `maomao3334/wechat-cli-plus` 提交 `75a322dd09c7c498536d10ff6935c5d52fd5fd2b`，i7 原生构建二进制 SHA-256 为 `8c49e1e6dfcaaa802e51f50d3627dbc832c1241da39e8d017928a824b09fa190`。本次只调用 C 二进制，不调用 Python 包装层，因此不会自动重签 `/Applications/WeChat.app`。
 
 管理员授权后扫描器退出码为 `1`，没有生成 `all_keys.json`；为避免在终端或对话中暴露 key，标准输出和错误输出均丢弃。执行期间微信未退出，之后确认无扫描器/provider/shadow 进程，原微信仍为腾讯 Developer ID 签名。该路线未取得访问材料；由于没有保留原始输出，不能从本次结果推断具体失败原因，也不再自动切换到直接重签原版微信。
+
+## 2026-09-12 yichen Frida 高侵入尝试
+
+用户明确授权对 i7 上的微信副本进行 Frida 注入，并在本机生成原始 key 日志和明文 vault。源码固定为 `mcncarl/yichen-skills` 提交 `fc575e5112eb4d4d5ea155f1f0cfd79621834006`，放在 i7 的隔离 provider 目录；依赖固定为 Frida `17.18.0`、frida-tools `14.10.4`、PyCryptodome `3.23.0`、zstandard `0.25.0`。
+
+实机结果分三层记录：
+
+1. 上游脚本的 `CCKeyDerivationPBKDF` Hook 成功安装，但 120 秒内捕获 `0` 次调用；登录副本并打开目标聊天后仍为 `0`。
+2. 额外 Hook `libsqlite3.dylib` 的 `sqlite3_key` 与 `sqlite3_key_v2`，两个入口均安装成功，重启已登录副本后仍为 `0` 次。
+3. 额外 Hook CommonCrypto `CCCrypt*`、OpenSSL `EVP_*Init_ex` 和 AES 256-bit 候选入口，11 个入口安装成功，但唯一 32 字节候选为 `0`，数据库匹配为 `0`。
+
+第二层确认副本实际打开了该账号 `db_storage` 下的 69 个数据库相关文件；因此失败不是未登录或未打开数据库。当前微信 4.1.13 使用了未被这些公开入口覆盖的 WCDB/内部加密路径，yichen 方案在此版本上没有取得 key，未生成明文 vault。
+
+恢复验收：停止所有副本和 Frida helper；删除空的 `wechat-keys.json`、配置文件和 `/tmp/wechat_frida_keys.log`；将约 1.4GB 的 ad-hoc 副本移入 i7 `~/.Trash/WeChat-frida-20260912.app`；重新启动 `/Applications/WeChat.app`。官方微信 PID `86602` 正常运行，Tencent Developer ID 签名与 `codesign --verify --deep --strict` 均通过。该路线不再继续盲目重试。
