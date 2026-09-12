@@ -9,8 +9,8 @@
 - 微信：`/Applications/WeChat.app`，版本 `4.1.13`
 - 微信容器：`~/Library/Containers/com.tencent.xinWeChat/`
 - 数据根：`~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/`
-- 当前运行进程实际打开的账号目录：`wxid_br72slr93x8112_574d`
-- 当前账号数据库根：`~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_br72slr93x8112_574d/db_storage/`
+- 当前运行进程实际打开的账号目录：已在 i7 本机确认；账号标识不写入项目文档
+- 当前账号数据库根：`~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/<selected-account>/db_storage/`
 - 当前账号目录约 15 MB；消息库 `message/message_0.db` 约 45 KB。
 
 运行中的微信进程通过文件句柄打开了该账号的 `message_0.db`、`message_0.kvdb`、`message_fts.db`、`session.db`、`contact.db` 及对应 WAL/SHM 文件。这比按目录大小猜测账号归属更可靠。
@@ -57,3 +57,9 @@ i7 原本的 `~/.zshenv` 为空；已加入 `/usr/local/bin` 与 `~/.local/bin` 
 微信窗口处于前台、但未打开测试会话时发送 `front-1`：6 秒监听捕获 1 条，正文精确匹配，发送者字段非空；2 秒复查捕获 0 条。说明该前台状态没有抑制系统通知。尚需测试当前聊天窗口保持打开时的通知覆盖。
 
 当前测试会话保持打开时发送 `open-chat-1`：8 秒监听完成 9 次轮询，捕获 0 条。macOS 通知库中的微信记录总数仍为 5，私有队列仍为 4 条，说明没有产生新系统通知，并非 Reader 解析或去重失败。通知方案无法覆盖用户正在查看的会话，不能单独作为完整实时消息源。
+
+## i7 provider 审核
+
+2026-09-12 已完成 i7 首次数据库接入候选的源码、原生构建和 Reader 计划审核，详见 [`i7-wxkey-provider-audit.md`](i7-wxkey-provider-audit.md)。建议候选固定为 `r266-tech/wxkey` 提交 `01e96fa58ce3ff061dce83e4c36f62104ebc6b16`；这是旧审核基线加 Intel PBKDF 参数修复后的提交。
+
+i7 已安装 Homebrew Go 1.27.1，并从固定源码构建出 `x86_64` 二进制。`go test ./...` 通过，SHA-256 为 `ef917e01b316e02a8ecb3556429c406ffeac39c8ab4cdaf506a6bd11d7771541`。Reader `plan` 和不带 `--apply` 的 `onboard` 均确认摘要匹配且 `provider_executed=false`，最终停在 `authorization_required`。原微信仍保持腾讯 Developer ID 签名；没有生成 provider 配置、shadow 应用或恢复锁。
