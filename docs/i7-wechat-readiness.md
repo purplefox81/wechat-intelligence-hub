@@ -49,3 +49,5 @@ i7 原本的 `~/.zshenv` 为空；已加入 `/usr/local/bin` 与 `~/.local/bin` 
 2026-09-12 再次检查：微信进程句柄仍指向该账号。`discover` 扫描 19 个数据库，`unreadable_or_encrypted_count=19`、`scan_error_count=0`、未截断；没有可直接使用的授权数据库。`doctor` 显示 `notification_preview_ok=true`、覆盖范围为 `incoming_preview_only`，但当前 `notifications --limit 20` 返回 0 条保留通知。因此现阶段没有完整历史/数据库读取能力，也没有可显示的通知消息。
 
 同日收到一条测试消息后，发现当前 macOS `usernoted` plist 将标题和正文嵌套在 `req` 字段；Reader 原先只读取顶层字段，导致记录存在但正文为空。已在 `notification_title_body` 增加嵌套格式兼容，并通过回归测试；重新部署到 i7 后，通知返回 1 条，发送者、会话和正文均可解析，覆盖仍明确标记为 `incoming_preview_only`。正文未写入项目文档或带回对话。
+
+随后新增 `notification-watch`：以通知事件哈希去重，首次运行建立基线，后续把新增通知追加到 i7 私有 `events.jsonl`，并用私有 `state.json` 断点续读。目录权限为 `0700`，状态文件为 `0600`；消息正文不写入项目。2 秒基线试运行完成 5 次轮询，120 秒实测完成 119 次轮询，期间没有新的系统通知，因此捕获数为 0，等待下一轮人工发信验收。

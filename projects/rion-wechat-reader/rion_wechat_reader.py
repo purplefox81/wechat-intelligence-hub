@@ -35,6 +35,11 @@ DEFAULT_CONFIG = Path("~/.config/rion-wechat-reader/config.json").expanduser()
 DEFAULT_NOTIFICATIONS_DB = Path(
     "~/Library/Group Containers/group.com.apple.usernoted/db2/db"
 ).expanduser()
+DEFAULT_NOTIFICATION_WATCH_ROOT = Path(
+    "~/Library/Application Support/rion-wechat-reader/notification-watch"
+).expanduser()
+DEFAULT_NOTIFICATION_WATCH_STATE = DEFAULT_NOTIFICATION_WATCH_ROOT / "state.json"
+DEFAULT_NOTIFICATION_WATCH_OUTPUT = DEFAULT_NOTIFICATION_WATCH_ROOT / "events.jsonl"
 WECHAT_BUNDLE_ID = "com.tencent.xinwechat"
 DEFAULT_WECHAT_ROOTS = [
     Path("~/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files").expanduser(),
@@ -71,6 +76,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
     "sns-search": {"aliases": ["sns_search"], "properties": ["after", "before", "keyword", "limit", "offset", "user"]},
     "sns-notifications": {"aliases": ["sns_notifications"], "properties": ["after", "before", "include_read", "limit"]},
     "notifications": {"aliases": [], "properties": ["after", "keyword", "limit"]},
+    "notification-watch": {"aliases": ["notification_watch"], "properties": ["duration", "include_existing", "limit", "output", "poll_interval", "state_file"]},
 }
 COMMAND_ALIASES = {
     "resolve_chat": "resolve-chat",
@@ -108,6 +114,7 @@ COMMAND_ALIASES = {
     "sns_feed": "sns-feed",
     "sns_search": "sns-search",
     "sns_notifications": "sns-notifications",
+    "notification_watch": "notification-watch",
     "import-keys": "import-access",
     "import_keys": "import-access",
 }
@@ -1783,6 +1790,21 @@ def notification_title_body(payload: dict[str, Any]) -> tuple[str, str]:
     return title, body
 
 
+def notification_event_id(record_uuid: Any, delivered_date: Any, title: str, body: str) -> str:
+    digest = hashlib.sha256(b"rion-wechat-notification/v1\0")
+    if isinstance(record_uuid, bytes):
+        digest.update(record_uuid)
+    elif record_uuid is not None:
+        digest.update(str(record_uuid).encode("utf-8", errors="replace"))
+    digest.update(b"\0")
+    digest.update(str(delivered_date or "").encode("utf-8", errors="replace"))
+    digest.update(b"\0")
+    digest.update(title.encode("utf-8", errors="replace"))
+    digest.update(b"\0")
+    digest.update(body.encode("utf-8", errors="replace"))
+    return digest.hexdigest()
+
+
 def notification_records(limit: int, after: str | None, keyword: str | None) -> list[dict[str, Any]]:
     path = DEFAULT_NOTIFICATIONS_DB
     if not path.exists():
@@ -1792,7 +1814,7 @@ def notification_records(limit: int, after: str | None, keyword: str | None) -> 
         conn = sqlite3.connect(f"file:{snapshot}?mode=ro", uri=True)
         try:
             query = (
-                "SELECT record.data, record.delivered_date FROM record JOIN app USING(app_id) "
+                "SELECT record.uuid, record.data, record.delivered_date FROM record JOIN app USING(app_id) "
                 "WHERE app.identifier=? ORDER BY record.delivered_date DESC LIMIT ?"
             )
             raw_rows = conn.execute(query, (WECHAT_BUNDLE_ID, max(limit * 4, limit))).fetchall()
@@ -1800,7 +1822,7 @@ def notification_records(limit: int, after: str | None, keyword: str | None) -> 
             conn.close()
     needle = (keyword or "").casefold()
     result: list[dict[str, Any]] = []
-    for blob, delivered_date in raw_rows:
+    for record_uuid, blob, delivered_date in raw_rows:
         unix_time = int(float(delivered_date) + 978307200) if delivered_date else 0
         if start is not None and unix_time < start:
             continue
@@ -1815,6 +1837,7 @@ def notification_records(limit: int, after: str | None, keyword: str | None) -> 
             continue
         result.append(
             {
+                "event_id": notification_event_id(record_uuid, delivered_date, title, body),
                 "sender": title,
                 "chat": title,
                 "text": body,
@@ -1828,6 +1851,90 @@ def notification_records(limit: int, after: str | None, keyword: str | None) -> 
         if len(result) >= limit:
             break
     return result
+
+
+def ensure_private_parent(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+
+
+def write_private_json(path: Path, data: dict[str, Any]) -> None:
+    ensure_private_parent(path)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+
+
+def append_private_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
+    if not records:
+        return
+    ensure_private_parent(path)
+    with path.open("a", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(json_safe(record), ensure_ascii=False) + "\n")
+    os.chmod(path, 0o600)
+
+
+def notification_watch(
+    duration: float,
+    poll_interval: float,
+    limit: int,
+    state_path: Path,
+    output_path: Path,
+    include_existing: bool,
+) -> dict[str, Any]:
+    if duration < 0:
+        raise ReaderError("duration 不能为负数", "invalid_argument")
+    if poll_interval < 0.25:
+        raise ReaderError("poll-interval 不能小于 0.25 秒", "invalid_argument")
+    if limit < 1 or limit > 1000:
+        raise ReaderError("limit 必须在 1 到 1000 之间", "invalid_argument")
+    state_path = state_path.expanduser()
+    output_path = output_path.expanduser()
+    if state_path == output_path:
+        raise ReaderError("state-file 和 output 不能是同一路径", "invalid_argument")
+    state = load_json(state_path) if state_path.exists() else {}
+    seen = {str(value) for value in state.get("seen_event_ids", []) if isinstance(value, str)}
+    first_run = not state_path.exists()
+    captured = 0
+    polls = 0
+    started = time.monotonic()
+    while True:
+        records = notification_records(limit, None, None)
+        polls += 1
+        new_records = [record for record in records if str(record.get("event_id") or "") not in seen]
+        if first_run and not include_existing:
+            new_records = []
+        else:
+            new_records.sort(key=lambda record: int(record.get("create_time") or 0))
+            append_private_jsonl(output_path, new_records)
+            captured += len(new_records)
+        for record in records:
+            event_id = str(record.get("event_id") or "")
+            if event_id:
+                seen.add(event_id)
+        write_private_json(
+            state_path,
+            {
+                "schema_version": 1,
+                "updated_at": time_iso(time.time()),
+                "seen_event_ids": sorted(seen)[-5000:],
+            },
+        )
+        first_run = False
+        if time.monotonic() - started >= duration:
+            break
+        time.sleep(min(poll_interval, max(0.0, duration - (time.monotonic() - started))))
+    return {
+        "state": "completed",
+        "coverage": "incoming_preview_only",
+        "captured": captured,
+        "polls": polls,
+        "state_file": str(state_path),
+        "output": str(output_path),
+        "contains_local_message_previews": output_path.exists(),
+    }
 
 
 def classify_database_tables(tables: set[str]) -> list[str]:
@@ -2964,6 +3071,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--after")
     p.add_argument("--keyword")
+    p = sub.add_parser("notification-watch", aliases=["notification_watch"])
+    p.add_argument("--duration", type=float, default=30.0)
+    p.add_argument("--poll-interval", type=float, default=2.0)
+    p.add_argument("--limit", type=int, default=100)
+    p.add_argument("--state-file", default=str(DEFAULT_NOTIFICATION_WATCH_STATE))
+    p.add_argument("--output", default=str(DEFAULT_NOTIFICATION_WATCH_OUTPUT))
+    p.add_argument("--include-existing", action="store_true")
     return parser
 
 
@@ -3349,6 +3463,19 @@ def main(argv: list[str] | None = None) -> int:
                 )
             elif command == "notifications":
                 emit(command, {"messages": notification_records(args.limit, args.after, args.keyword)}, args.pretty)
+            elif command == "notification-watch":
+                emit(
+                    command,
+                    notification_watch(
+                        args.duration,
+                        args.poll_interval,
+                        args.limit,
+                        Path(args.state_file),
+                        Path(args.output),
+                        args.include_existing,
+                    ),
+                    args.pretty,
+                )
             else:
                 raise ReaderError(f"尚未实现命令：{command}")
         return 0

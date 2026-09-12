@@ -55,6 +55,14 @@ python3 rion_wechat_reader.py --pretty notifications --limit 10
 
 没有数据库配置时，`status` 会返回 `degraded`：只能使用通知预览。通知模式只覆盖系统实际保留的入站预览，不覆盖静音聊天、完整历史、附件或自己发出的消息。
 
+可以把新增通知预览追加到本机私有 JSONL 队列。首次运行默认只建立基线，不导出既有通知；状态目录和文件权限分别为 `0700` 和 `0600`：
+
+```bash
+rion-wechat-cli notification-watch --duration 120 --poll-interval 1 --pretty
+```
+
+默认输出位于 `~/Library/Application Support/rion-wechat-reader/notification-watch/`。该文件包含本地消息预览，不能同步或提交到仓库；监听仍不覆盖静音聊天、前台抑制通知或完整历史。
+
 `setup` 会自动检查微信数据目录、寻找可访问数据库、写入本机私有配置并运行诊断。导入授权材料后，它会复用材料中经过验证的数据库根目录，自动推导本人发送者标识，并发现已授权的媒体目录。完整数据库读取可用时返回 `ready`；当前微信数据库缺少访问材料时返回 `database_access_material_required`。
 
 已经合法持有兼容 `all_keys.json` 授权材料的用户，可以显式导入并在写入前验证：
